@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini App POC (Android Assets)</title>
+    <style>
+        body { font-family: sans-serif; padding: 1rem; }
+        .container { max-width: 600px; margin: auto; }
+        button { display: block; width: 100%; padding: 10px; margin-bottom: 10px; font-size: 16px; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; }
+    .spinner { width:24px; height:24px; border:3px solid #ccc; border-top-color:#004a99; border-radius:50%; animation:spin 1s linear infinite; margin:8px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .muted { color:#666; font-size:12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Mini App (MISA SME Mini)</h1>
+    <p>Đây là mini app chạy từ Android assets thông qua WebView.</p>
+
+    <button onclick="getAuthToken()">1. Lấy Token Định danh (SSO)</button>
+  <button onclick="requestPayment()">2. Yêu cầu Thanh toán Đơn lẻ (Dialog Legacy)</button>
+  <button onclick="requestPaymentFullScreen()">3. Yêu cầu Thanh toán Toàn màn hình</button>
+  <button onclick="requestPaymentFailed()">4. Yêu cầu Thanh toán Đơn lẻ (Mô phỏng FAILED)</button>
+  <button onclick="requestBatchPayment()">5. Yêu cầu Thanh toán theo Lô (Chi lương)</button>
+  <button onclick="pickAvatar()">6. Chọn Avatar</button>
+  <button onclick="fetchPublicApi()">7. Gọi Public API (Thời tiết Open‑Meteo)</button>
+
+    <h3>Kết quả từ Shell App:</h3>
+    <pre id="result">Chưa có dữ liệu...</pre>
+</div>
+
+<script>
+const resultEl = document.getElementById('result');
+// Cache object cho thời tiết (TTL 60s)
+const weatherCache = { ts: 0, data: null };
+const WEATHER_CACHE_TTL = 60000; // 60 giây
+
+// Callback từ Shell App khi thanh toán đơn lẻ hoàn tất
+window.onPaymentResult = function(result) {
+  resultEl.textContent = `Thanh toán hoàn tất:\n${JSON.stringify(result, null, 2)}`;
+};
+
+async function getAuthToken() {
+  resultEl.textContent = 'Đang gọi getAuthToken...';
+  try {
+    if (window.superAppBridge) {
+      const token = await window.superAppBridge.getAuthToken({ appKey: 'MISA_SME_MINI_KEY' });
+      resultEl.textContent = `Nhận được JWT Token:\n${token}`;
+    } else {
+      resultEl.textContent = 'Lỗi: superAppBridge không tồn tại.';
+    }
+  } catch (e) {
+    resultEl.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+async function requestPayment() {
+  resultEl.textContent = 'Đang gọi requestPayment...';
+  try {
+    if (window.superAppBridge) {
+      await window.superAppBridge.requestPayment({ amount: 500000, orderId: 'ORD-' + Date.now() });
+      resultEl.textContent = 'Đã gửi yêu cầu thanh toán. Chờ callback...';
+    } else {
+      resultEl.textContent = 'Lỗi: superAppBridge không tồn tại.';
+    }
+  } catch (e) {
+    resultEl.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+async function requestPaymentFullScreen() {
+  resultEl.textContent = 'Đang mở màn hình thanh toán toàn màn hình...';
+  try {
+    if (window.superAppBridge) {
+      await window.superAppBridge.requestPayment({ amount: 600000, orderId: 'ORD-' + Date.now(), uiMode: 'FULL_SCREEN' });
+      resultEl.textContent = 'Đã trigger PaymentActivity. Chờ callback...';
+    } else {
+      resultEl.textContent = 'Lỗi: superAppBridge không tồn tại.';
+    }
+  } catch (e) {
+    resultEl.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+async function requestPaymentFailed() {
+  resultEl.textContent = 'Đang gọi requestPayment (simulate FAILED)...';
+  try {
+    if (window.superAppBridge) {
+      await window.superAppBridge.requestPayment({ amount: 800000, orderId: 'ORD-' + Date.now(), simulateResult: 'FAILED' });
+      resultEl.textContent = 'Đã gửi yêu cầu thanh toán FAILED. Chờ callback...';
+    } else {
+      resultEl.textContent = 'Lỗi: superAppBridge không tồn tại.';
+    }
+  } catch (e) {
+    resultEl.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+async function requestBatchPayment() {
+  resultEl.textContent = 'Đang gọi requestBatchPayment...';
+  try {
+    if (window.superAppBridge) {
+      const res = await window.superAppBridge.requestBatchPayment({
+        batchId: 'BATCH-' + Date.now(),
+        payments: [
+          { amount: 15000000, toAccount: '123456', name: 'Nguyen Van A' },
+          { amount: 18000000, toAccount: '789012', name: 'Tran Thi B' }
+        ]
+      });
+      resultEl.textContent = 'Kết quả batch:\n' + JSON.stringify(res, null, 2);
+    } else {
+      resultEl.textContent = 'Lỗi: superAppBridge không tồn tại.';
+    }
+  } catch (e) {
+    resultEl.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+async function pickAvatar() {
+  resultEl.textContent = 'Đang mở chọn Avatar...';
+  try {
+    if (window.superAppBridge) {
+      const avatarDataUrl = await window.superAppBridge.pickAvatar({});
+      resultEl.textContent = 'Đã chọn avatar!';
+      let img = document.getElementById('miniAppAvatar');
+      if (!img) {
+        img = document.createElement('img');
+        img.id = 'miniAppAvatar';
+        img.style.width = '96px';
+        img.style.height = '96px';
+        img.style.borderRadius = '48px';
+        img.style.marginTop = '12px';
+        resultEl.parentElement.appendChild(img);
+      }
+      img.src = avatarDataUrl;
+    } else {
+      resultEl.textContent = 'Lỗi: superAppBridge không tồn tại.';
+    }
+  } catch (e) {
+    if (e && e.message === 'AVATAR_PICK_CANCELLED') {
+      resultEl.textContent = 'Bạn đã hủy chọn avatar.';
+    } else {
+      resultEl.textContent = 'Lỗi: ' + (e?.message || e);
+    }
+  }
+}
+
+// 7. Public API Demo (Open-Meteo Weather)
+async function fetchPublicApi() {
+  const now = Date.now();
+  // Dùng cache nếu còn hạn
+  if (weatherCache.data && (now - weatherCache.ts) < WEATHER_CACHE_TTL) {
+    const age = Math.floor((now - weatherCache.ts)/1000);
+    const d = weatherCache.data;
+    resultEl.textContent = `Thời tiết (cache ${age}s)\nNhiệt độ: ${d.temperature}°C\nĐộ ẩm: ${d.humidity}%\nGió: ${d.wind} m/s\nThời gian: ${d.time}\n(Nguồn: open-meteo.com)`;
+    return;
+  }
+  // Hiển thị spinner
+  resultEl.innerHTML = '<div class="spinner"></div><div style="text-align:center">Đang gọi Open‑Meteo...</div>';
+  try {
+    // Ví dụ: Hà Nội (lat ~21.03, lon ~105.85)
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=21.03&longitude=105.85&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto';
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const cur = data?.current || {};
+    const temperature = cur.temperature_2m;
+    const humidity = cur.relative_humidity_2m;
+    const wind = cur.wind_speed_10m;
+    const time = cur.time;
+    weatherCache.ts = Date.now();
+    weatherCache.data = { temperature, humidity, wind, time };
+    resultEl.textContent = `Thời tiết hiện tại\nNhiệt độ: ${temperature}°C\nĐộ ẩm: ${humidity}%\nGió: ${wind} m/s\nThời gian: ${time}\n(Nguồn: open-meteo.com)`;
+  } catch (err) {
+    resultEl.textContent = 'Public API (Open‑Meteo) lỗi: ' + (err.message || err);
+  }
+}
+</script>
+</body>
+</html>
